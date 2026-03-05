@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "migrate": "node dist/db/migrate.js",
+    "seed": "tsx src/indexers/seed.ts",
     "lint": "tsc --noEmit"
   },
   "keywords": ["x402", "erc-8004", "trust-score", "ai-agents", "base"],
