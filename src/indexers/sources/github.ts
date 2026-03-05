@@ -57,8 +57,13 @@ function fetchRaw(url: string, token?: string): Promise<string> {
   });
 }
 
-const DEPLOYED_URL_PATTERN = /https?:\/\/[^\s)"']+(?:\.fly\.dev|\.railway\.app|\.vercel\.app|\.onrender\.com|\.netlify\.app|\.herokuapp\.com|\.up\.railway\.app)[^\s)"']*/g;
+const DEPLOYED_URL_PATTERN = /https?:\/\/[^\s)"'`]+(?:\.fly\.dev|\.railway\.app|\.vercel\.app|\.onrender\.com|\.netlify\.app|\.herokuapp\.com|\.up\.railway\.app)[^\s)"'`]*/g;
 const WALLET_PATTERN = /0x[a-fA-F0-9]{40}/g;
+
+/** Filter out template/placeholder URLs */
+function isRealUrl(url: string): boolean {
+  return !/<|>|\{|\}|\$|`|your-|example|placeholder|PROJECT|APP_NAME/i.test(url);
+}
 
 /**
  * Search GitHub for x402 implementations using REPO search (no auth required).
@@ -68,7 +73,6 @@ export async function crawlGitHub(token?: string): Promise<GitHubAgent[]> {
   const agents: GitHubAgent[] = [];
   const seenRepos = new Set<string>();
 
-  // Use repository search (doesn't require auth, 10 req/min unauthenticated)
   const queries = [
     'x402 in:name,description,readme',
     'x402 express',
@@ -100,7 +104,6 @@ export async function crawlGitHub(token?: string): Promise<GitHubAgent[]> {
         seenRepos.add(repoFullName);
 
         try {
-          // Fetch README
           const branch = item.default_branch || 'main';
           let readme: string;
           try {
@@ -109,7 +112,7 @@ export async function crawlGitHub(token?: string): Promise<GitHubAgent[]> {
             continue;
           }
 
-          const urls = readme.match(DEPLOYED_URL_PATTERN) || [];
+          const urls = (readme.match(DEPLOYED_URL_PATTERN) || []).filter(isRealUrl);
           const addresses = readme.match(WALLET_PATTERN) || [];
 
           for (const rawUrl of [...new Set(urls)]) {
@@ -123,7 +126,7 @@ export async function crawlGitHub(token?: string): Promise<GitHubAgent[]> {
             });
           }
 
-          // Even without deployed URLs, record x402 projects
+          // Record x402 projects even without deployed URLs
           if (urls.length === 0 && (
             readme.toLowerCase().includes('x402') ||
             readme.toLowerCase().includes('erc-8004')
@@ -136,10 +139,9 @@ export async function crawlGitHub(token?: string): Promise<GitHubAgent[]> {
               description: item.description || 'x402 project (no deployed endpoint)',
             });
           }
-        } catch { /* skip repos we can't read */ }
+        } catch { /* skip */ }
       }
 
-      // Rate limit courtesy
       await new Promise(r => setTimeout(r, 2000));
     } catch (err: any) {
       console.log(`  [github] Search error: ${err.message}`);
