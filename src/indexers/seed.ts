@@ -3,9 +3,11 @@
  *
  * Sources:
  *   1. x402.org/bazaar + Coinbase x402 examples
- *   2. GitHub search for x402 implementations
+ *   2. GitHub search for x402 implementations (exhaustive code search)
  *   3. ERC-8004 on-chain registry (Base mainnet)
- *   4. Direct HTTP 402 probing on all discovered endpoints
+ *   4. 8004scan.io — comprehensive ERC-8004 agent index
+ *   5. x402 Facilitator contracts — real payment recipients on Base
+ *   6. Direct HTTP 402 probing on all discovered endpoints
  *
  * Usage:
  *   npx tsx src/indexers/seed.ts
@@ -17,6 +19,8 @@ import { Pool } from 'pg';
 import { crawlX402Bazaar } from './sources/x402bazaar';
 import { crawlGitHub } from './sources/github';
 import { crawlERC8004 } from './sources/erc8004';
+import { crawlScan8004 } from './sources/scan8004';
+import { crawlFacilitator } from './sources/facilitator';
 import { probeX402, probeMany } from './sources/probe';
 
 // ----- Types -----
@@ -38,7 +42,6 @@ function getPool(): Pool {
 }
 
 async function ensureTables(pool: Pool): Promise<void> {
-  // Run migration 002 inline (idempotent with IF NOT EXISTS)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS agents (
       id            SERIAL PRIMARY KEY,
@@ -74,8 +77,6 @@ async function upsertAgent(
   pool: Pool,
   agent: DiscoveredAgent & { x402_verified?: boolean; x402_version?: string }
 ): Promise<number> {
-  // Use endpoint as the unique key if no address, since address can be null
-  // For agents with an address, upsert by address; for others, upsert by (name, source)
   const result = agent.address
     ? await pool.query(`
         INSERT INTO agents (address, name, endpoint, source, source_ref, x402_verified, x402_version, metadata)
@@ -122,7 +123,6 @@ async function insertSignal(
   );
 }
 
-// Also upsert into agent_scores for the scoring engine
 async function upsertAgentScore(pool: Pool, address: string): Promise<void> {
   if (!address) return;
   await pool.query(`
@@ -142,7 +142,6 @@ async function seed(): Promise<void> {
   const pool = getPool();
 
   try {
-    // Ensure tables exist
     await ensureTables(pool);
     console.log('Database tables ready.\n');
 
@@ -169,12 +168,24 @@ async function seed(): Promise<void> {
     }
     console.log('');
 
-    // --- Source 2: GitHub ---
+    // --- Source 2: GitHub (exhaustive code search) ---
     let githubToken: string | undefined;
     try {
       const fs = require('fs');
-      if (fs.existsSync('/home/linus/.secrets/github_pat_classic')) {
-        githubToken = fs.readFileSync('/home/linus/.secrets/github_pat_classic', 'utf-8').trim();
+      // Try multiple token locations
+      for (const path of [
+        '/home/linus/.secrets/github_pat_classic',
+        '/home/claudia/.secrets/github_pat_classic',
+        process.env.GITHUB_TOKEN,
+      ]) {
+        if (path && !path.startsWith('/') && path.length > 10) {
+          githubToken = path; // It's an env var value
+          break;
+        }
+        if (path && fs.existsSync(path)) {
+          githubToken = fs.readFileSync(path, 'utf-8').trim();
+          break;
+        }
       }
     } catch { /* no token available */ }
 
@@ -219,67 +230,154 @@ async function seed(): Promise<void> {
     }
     console.log('');
 
-    // --- Deduplicate by endpoint ---
-    const seen = new Set<string>();
-    const uniqueAgents = allAgents.filter(a => {
+    // --- Source 4: 8004scan.io ---
+    try {
+      const scanAgents = await crawlScan8004();
+      for (const a of scanAgents) {
+        allAgents.push({
+          name: a.name,
+          endpoint: a.endpoint,
+          address: a.address,
+          source: '8004scan',
+          source_ref: `8004scan:${a.agentId}`,
+          metadata: {
+            chain: a.chain,
+            chainId: a.chainId,
+            description: a.description,
+            x402Supported: a.x402Supported,
+            registeredAt: a.registeredAt,
+          },
+        });
+      }
+      stats['8004scan'] = scanAgents.length;
+    } catch (err: any) {
+      console.error(`[FAIL] 8004scan: ${err.message}`);
+      stats['8004scan'] = 0;
+    }
+    console.log('');
+
+    // --- Source 5: x402 Facilitator contracts ---
+    try {
+      const rpcUrl = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
+      const facilitatorAgents = await crawlFacilitator(rpcUrl);
+      for (const a of facilitatorAgents) {
+        allAgents.push({
+          name: `x402-payee-${a.address.slice(0, 10)}`,
+          endpoint: '',
+          address: a.address,
+          source: 'x402_facilitator',
+          source_ref: a.txHash || 'facilitator-scan',
+          metadata: { x402_payment_verified: true },
+        });
+      }
+      stats['x402_facilitator'] = facilitatorAgents.length;
+    } catch (err: any) {
+      console.error(`[FAIL] Facilitator: ${err.message}`);
+      stats['x402_facilitator'] = 0;
+    }
+    console.log('');
+
+    // --- Deduplicate by address (prefer agents with endpoints) ---
+    const agentMap = new Map<string, DiscoveredAgent>();
+    const noAddressAgents: DiscoveredAgent[] = [];
+
+    for (const a of allAgents) {
+      if (!a.address) {
+        noAddressAgents.push(a);
+        continue;
+      }
+      const key = a.address.toLowerCase();
+      const existing = agentMap.get(key);
+      if (!existing) {
+        agentMap.set(key, a);
+      } else {
+        // Merge: prefer agent with endpoint
+        if (a.endpoint && !existing.endpoint) {
+          agentMap.set(key, { ...a, metadata: { ...existing.metadata, ...a.metadata } });
+        } else {
+          agentMap.set(key, { ...existing, metadata: { ...existing.metadata, ...a.metadata } });
+        }
+      }
+    }
+
+    // For no-address agents, dedup by endpoint
+    const seenEndpoints = new Set<string>();
+    const uniqueNoAddr = noAddressAgents.filter(a => {
       const key = a.endpoint || `${a.name}:${a.source}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
+      if (seenEndpoints.has(key)) return false;
+      seenEndpoints.add(key);
       return true;
     });
+
+    const uniqueAgents = [...agentMap.values(), ...uniqueNoAddr];
 
     console.log(`Total discovered: ${allAgents.length}, unique: ${uniqueAgents.length}`);
     console.log('');
 
-    // --- Source 4: Probe all endpoints for 402 ---
+    // --- Source 6: Probe all endpoints for 402 ---
     console.log('[probe] Probing all endpoints for x402...');
     const endpointsToProbe = uniqueAgents
       .map(a => a.endpoint)
       .filter(e => e && (e.startsWith('http://') || e.startsWith('https://')));
 
-    const probeResults = await probeMany(endpointsToProbe);
+    // Limit probing to first 200 endpoints to avoid timeout
+    const probeList = endpointsToProbe.slice(0, 200);
+    if (endpointsToProbe.length > 200) {
+      console.log(`  [probe] Limiting to 200 probes (${endpointsToProbe.length} total endpoints)`);
+    }
+
+    const probeResults = await probeMany(probeList);
     const probeMap = new Map(probeResults.map(r => [r.url, r]));
 
     let verifiedCount = 0;
     for (const result of probeResults) {
       if (result.is402) verifiedCount++;
-      console.log(`  ${result.is402 ? '✓' : result.reachable ? '○' : '✗'} ${result.url} → ${result.statusCode || 'unreachable'}${result.x402Version ? ` (x402: ${result.x402Version})` : ''}`);
+      if (result.is402 || result.reachable) {
+        console.log(`  ${result.is402 ? '✓' : '○'} ${result.url} → ${result.statusCode}${result.x402Version ? ` (x402: ${result.x402Version})` : ''}`);
+      }
     }
     stats['x402_verified'] = verifiedCount;
-    console.log(`[probe] ${verifiedCount} verified x402 service(s) out of ${endpointsToProbe.length} probed\n`);
+    console.log(`[probe] ${verifiedCount} verified x402 service(s) out of ${probeList.length} probed\n`);
 
     // --- Insert into DB ---
     console.log('Upserting agents into database...');
     let insertedCount = 0;
 
     for (const agent of uniqueAgents) {
-      const probe = probeMap.get(agent.endpoint);
-      const agentId = await upsertAgent(pool, {
-        ...agent,
-        x402_verified: probe?.is402 || false,
-        x402_version: probe?.x402Version || undefined,
-      });
+      try {
+        const probe = probeMap.get(agent.endpoint);
+        // Facilitator-sourced agents are always x402_verified
+        const isFromFacilitator = agent.source === 'x402_facilitator';
 
-      if (agentId > 0) {
-        insertedCount++;
-
-        // Record indexing signal
-        await insertSignal(pool, agentId, agent.address || null, 'indexed', {
-          source: agent.source,
-          source_ref: agent.source_ref,
+        const agentId = await upsertAgent(pool, {
+          ...agent,
+          x402_verified: probe?.is402 || isFromFacilitator || false,
+          x402_version: probe?.x402Version || undefined,
         });
 
-        // Record probe signal
-        if (probe) {
-          await insertSignal(pool, agentId, agent.address || null,
-            probe.is402 ? 'x402_detected' : probe.reachable ? 'probe_success' : 'probe_fail',
-            { statusCode: probe.statusCode, latencyMs: probe.latencyMs, x402Version: probe.x402Version }
-          );
-        }
+        if (agentId > 0) {
+          insertedCount++;
 
-        // Also seed agent_scores if we have an address
-        if (agent.address) {
-          await upsertAgentScore(pool, agent.address);
+          await insertSignal(pool, agentId, agent.address || null, 'indexed', {
+            source: agent.source,
+            source_ref: agent.source_ref,
+          });
+
+          if (probe) {
+            await insertSignal(pool, agentId, agent.address || null,
+              probe.is402 ? 'x402_detected' : probe.reachable ? 'probe_success' : 'probe_fail',
+              { statusCode: probe.statusCode, latencyMs: probe.latencyMs, x402Version: probe.x402Version }
+            );
+          }
+
+          if (agent.address) {
+            await upsertAgentScore(pool, agent.address);
+          }
+        }
+      } catch (err: any) {
+        // Skip individual agent insert errors (e.g., constraint violations)
+        if (!err.message?.includes('duplicate key')) {
+          console.error(`  [db] Error inserting ${agent.name}: ${err.message?.slice(0, 100)}`);
         }
       }
     }
@@ -291,7 +389,6 @@ async function seed(): Promise<void> {
       console.log(`  ${source}: ${count}`);
     }
 
-    // Final count
     const countResult = await pool.query('SELECT count(*) as total FROM agents');
     const scoreCount = await pool.query('SELECT count(*) as total FROM agent_scores');
     console.log(`\nTotal agents in DB: ${countResult.rows[0].total}`);
