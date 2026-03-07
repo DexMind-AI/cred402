@@ -7,9 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Coolify deploy
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
-          curl -s -X POST \
-            "https://coolify.forge.dexmind.ai/api/v1/applications/egcsw4gos8gw0s0go84s04ok/restart" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
-            -H "Accept: application/json" \
-            -o /dev/null -w "HTTP %{http_code}"
+          curl -sf -X POST \
+            "https://coolify.forge.dexmind.ai/api/v1/deploy?uuid=egcsw4gos8gw0s0go84s04ok" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            -H "Accept: application/json"
