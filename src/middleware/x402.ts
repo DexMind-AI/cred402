@@ -3,7 +3,7 @@ import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
-import { RoutesConfig } from '@x402/core/server';
+import type { RoutesConfig } from '@x402/core/server';
 
 // --- Route definitions for x402-protected endpoints ---
 
@@ -56,9 +56,16 @@ const resourceServer = new x402ResourceServer(facilitatorClient)
 /**
  * Standard x402 payment middleware using @x402/express.
  * Handles 402 responses, payment verification via facilitator, and settlement.
+ * syncFacilitatorOnStart is disabled to avoid startup delays in containerized environments.
  */
 export function createX402Middleware() {
-  return paymentMiddleware(routes, resourceServer);
+  return paymentMiddleware(
+    routes,
+    resourceServer,
+    undefined,  // paywallConfig
+    undefined,  // paywall
+    false,      // syncFacilitatorOnStart — don't block startup
+  );
 }
 
 /**
@@ -76,6 +83,13 @@ export function x402WithFreeTier() {
     }
 
     // Delegate to standard x402 middleware
-    return x402(req, res, next);
+    try {
+      return await x402(req, res, next);
+    } catch (err) {
+      console.error('x402 middleware error:', err);
+      // If x402 middleware fails, let the request through
+      // (better to serve free than to crash)
+      next();
+    }
   };
 }
