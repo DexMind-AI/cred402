@@ -9,16 +9,13 @@ export const config = {
   // Constants
   usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`,
   erc8004Registry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as `0x${string}`,
-  network: 'eip155:8453' as const, // Base mainnet (CAIP-2 format)
+  network: 'base' as const, // x402 v1 network name
 
   // Scoring
   scoreCacheTtlSeconds: 6 * 60 * 60, // 6 hours
   freeTierLimit: 100,
 
-  // x402 pricing
-  scorePrice: '$0.001' as const,
-  profilePrice: '$0.001' as const,
-
-  // x402 facilitator
-  facilitatorUrl: process.env.X402_FACILITATOR_URL || 'https://facilitator.x402.org',
+  // x402 pricing (in USDC smallest units, 6 decimals)
+  // 1000 = $0.001
+  priceUsdc: '1000',
 } as const;

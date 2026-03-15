@@ -1,6 +1,6 @@
 {
   "name": "cred402",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "x402-native TrustScore API for ERC-8004 AI agents",
   "main": "dist/index.js",
   "scripts": {
@@ -23,9 +23,6 @@
   "author": "darrwalk",
   "license": "MIT",
   "dependencies": {
-    "@x402/express": "^2.6.0",
-    "@x402/core": "^2.6.0",
-    "@x402/evm": "^2.6.0",
     "cors": "^2.8.6",
     "express": "^4.21.2",
     "ioredis": "^5.4.2",

@@ -130,7 +130,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       // If 402 verified, compute score asynchronously
       setImmediate(async () => {
         try {
-          const { getAgentScore } = await import('../services/scorer.js');
+          const { getAgentScore } = await import('../services/scorer');
           await getAgentScore(address as `0x${string}`);
           console.log(`[register] Score computed for ${address}`);
         } catch (err: any) {

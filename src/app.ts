@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { freeTierRateLimit } from './middleware/rateLimit';
-import { x402WithFreeTier } from './middleware/x402';
+import { x402PaymentGate } from './middleware/x402';
 import scoreRouter from './routes/score';
 import profileRouter from './routes/profile';
 import statusRouter from './routes/status';
@@ -19,8 +19,8 @@ export function createApp() {
       'https://www.cred402.com',
     ],
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'X-PAYMENT', 'Authorization'],
-    exposedHeaders: ['X-PAYMENT-RESPONSE'],
+    allowedHeaders: ['Content-Type', 'X-PAYMENT', 'Payment-Signature', 'Authorization'],
+    exposedHeaders: ['X-PAYMENT-RESPONSE', 'X-RateLimit-Remaining'],
   }));
 
   app.use(express.json());
@@ -28,20 +28,16 @@ export function createApp() {
   // Trust proxy for IP-based rate limiting
   app.set('trust proxy', true);
 
-  // Health endpoint (before any payment middleware)
+  // Health endpoint (no auth, no payment)
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', version: '2.0.0' });
   });
 
-  // Apply free-tier rate limiter, then x402 payment middleware
-  // for the paid endpoints
-  app.use('/v1/score', freeTierRateLimit());
-  app.use('/v1/profile', freeTierRateLimit());
-  app.use(x402WithFreeTier());
+  // Paid endpoints: rate limiter → x402 payment gate → route handler
+  app.use('/v1/score', freeTierRateLimit(), x402PaymentGate('score'), scoreRouter);
+  app.use('/v1/profile', freeTierRateLimit(), x402PaymentGate('profile'), profileRouter);
 
-  // Routes
-  app.use('/v1/score', scoreRouter);
-  app.use('/v1/profile', profileRouter);
+  // Free endpoints
   app.use('/v1/status', statusRouter);
   app.use('/v1/register', registerRouter);
   app.use('/v1/leaderboard', leaderboardRouter);
@@ -53,6 +49,12 @@ export function createApp() {
       version: '2.0.0',
       description: 'x402-native TrustScore API for ERC-8004 AI agents',
       docs: '/v1/status',
+      x402: {
+        version: 1,
+        network: 'base',
+        asset: 'USDC',
+        price: '$0.001',
+      },
       endpoints: {
         score: 'GET /v1/score/:agent',
         profile: 'GET /v1/profile/:agent',
