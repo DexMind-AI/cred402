@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { freeTierRateLimit } from './middleware/rateLimit';
-import { x402PaymentGate } from './middleware/x402';
+import { x402Gate } from './middleware/x402';
 import scoreRouter from './routes/score';
 import profileRouter from './routes/profile';
 import statusRouter from './routes/status';
@@ -34,8 +34,8 @@ export function createApp() {
   });
 
   // Paid endpoints: rate limiter → x402 payment gate → route handler
-  app.use('/v1/score', freeTierRateLimit(), x402PaymentGate('score'), scoreRouter);
-  app.use('/v1/profile', freeTierRateLimit(), x402PaymentGate('profile'), profileRouter);
+  app.use('/v1/score', freeTierRateLimit(), x402Gate(), scoreRouter);
+  app.use('/v1/profile', freeTierRateLimit(), x402Gate(), profileRouter);
 
   // Free endpoints
   app.use('/v1/status', statusRouter);

@@ -34,10 +34,17 @@ GET /v1/status          → { ok, version }
 
 Queries cost **$0.001 USDC** per call (on Base). The first **100 calls per IP** are free (no payment required).
 
-When free tier is exhausted, the API returns a `402 Payment Required` response with x402-compatible payment details. Clients pay USDC on Base to the treasury address and retry with an `X-PAYMENT` header.
+When free tier is exhausted, the API returns a `402 Payment Required` response with x402-compatible payment details. Payment verification is handled by the [Coinbase x402 facilitator](https://github.com/coinbase/x402) via the `@x402/express` middleware.
+
+**How it works:**
+1. Client sends request without payment → gets `402` with payment requirements
+2. Client signs a USDC payment on Base and includes proof in `X-Payment` header
+3. The x402 facilitator verifies the payment and settles it to the treasury
+4. Client receives the scored response
 
 **Asset:** USDC on Base (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`)
-**Network:** Base Mainnet
+**Network:** Base Mainnet (chain ID 8453)
+**Facilitator:** Coinbase x402 (`https://facilitator.x402.org`)
 
 ## Local Development
 
@@ -76,7 +83,8 @@ npm test
 | `DATABASE_URL` | PostgreSQL connection string | `postgres://cred402:cred402@localhost:5432/cred402` |
 | `REDIS_URL` | Redis connection string | `redis://localhost:6379` |
 | `BASE_RPC_URL` | Base mainnet RPC URL | `https://mainnet.base.org` |
-| `CRED402_TREASURY_ADDRESS` | USDC payment destination | — |
+| `CRED402_TREASURY_ADDRESS` | USDC payment destination | `0xD6Ae8D2F816EE123E77D1D698f8a3873A563CB5F` |
+| `X402_FACILITATOR_URL` | x402 facilitator URL for payment verification | `https://facilitator.x402.org` |
 | `PORT` | Server port | `3000` |
 | `NODE_ENV` | Environment | `development` |
 
@@ -113,8 +121,8 @@ fly ssh console -C "node dist/db/migrate.js"
 - **Blockchain:** viem (read-only, Base)
 - **Database:** PostgreSQL
 - **Cache:** Redis (6h score TTL)
-- **Payments:** x402 (USDC on Base)
-- **Hosting:** fly.io
+- **Payments:** x402 via `@x402/express` + Coinbase facilitator (USDC on Base)
+- **Hosting:** Coolify on forge.dexmind.ai
 
 ## License
 
