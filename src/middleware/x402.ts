@@ -2,19 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
+import { facilitator } from '@coinbase/x402';
 import { config } from '../config';
 
 /**
- * x402 payment middleware using Coinbase facilitator for real payment verification.
+ * x402 payment middleware using Coinbase CDP facilitator for real payment verification.
  *
  * - Base mainnet (eip155:8453)
  * - USDC asset
  * - $0.001 per query
  * - Free tier bypass when req.freeTier is true
+ *
+ * Uses @coinbase/x402 for the official CDP facilitator URL and auth.
+ * Requires CDP_API_KEY_ID and CDP_API_KEY_SECRET env vars.
  */
-
-const FACILITATOR_URL =
-  process.env.X402_FACILITATOR_URL || 'https://facilitator.x402.org';
 
 // Route payment configurations for x402
 const X402_ROUTES: Record<string, {
@@ -45,14 +46,12 @@ const X402_ROUTES: Record<string, {
   },
 };
 
-// Build the x402 resource server with Coinbase facilitator
+// Build the x402 resource server with Coinbase CDP facilitator
 let _middleware: ReturnType<typeof paymentMiddleware> | null = null;
 
 function getPaymentMiddleware() {
   if (!_middleware) {
-    const facilitatorClient = new HTTPFacilitatorClient({
-      url: FACILITATOR_URL,
-    });
+    const facilitatorClient = new HTTPFacilitatorClient(facilitator);
     const resourceServer = new x402ResourceServer(facilitatorClient)
       .register('eip155:8453', new ExactEvmScheme());
 

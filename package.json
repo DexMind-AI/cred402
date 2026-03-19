@@ -23,6 +23,7 @@
   "author": "darrwalk",
   "license": "MIT",
   "dependencies": {
+    "@coinbase/x402": "^2.1.0",
     "@x402/evm": "^2.7.0",
     "@x402/express": "^2.7.0",
     "cors": "^2.8.6",
