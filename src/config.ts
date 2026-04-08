@@ -3,13 +3,13 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   databaseUrl: process.env.DATABASE_URL || 'postgres://cred402:cred402@localhost:5432/cred402',
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
-  baseRpcUrl: process.env.BASE_RPC_URL || 'https://sepolia.base.org',
+  baseRpcUrl: process.env.BASE_RPC_URL || 'https://mainnet.base.org',
   treasuryAddress: (process.env.CRED402_TREASURY_ADDRESS || '0xD6Ae8D2F816EE123E77D1D698f8a3873A563CB5F') as `0x${string}`,
 
-  // Constants — Base Sepolia testnet
-  usdcAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as `0x${string}`, // USDC on Base Sepolia
+  // Constants — Base mainnet
+  usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`, // USDC on Base mainnet
   erc8004Registry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as `0x${string}`,
-  network: 'base-sepolia' as const, // x402 v1 network name
+  network: 'base' as const, // x402 v1 network name
 
   // Scoring
   scoreCacheTtlSeconds: 6 * 60 * 60, // 6 hours

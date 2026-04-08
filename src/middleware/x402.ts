@@ -5,15 +5,15 @@ import { HTTPFacilitatorClient } from '@x402/core/server';
 import { config } from '../config';
 
 /**
- * x402 payment middleware using testnet facilitator (no API keys needed).
+ * x402 payment middleware using PayAI Network facilitator (no API keys needed).
  *
- * - Base Sepolia (eip155:84532)
+ * - Base mainnet (eip155:8453)
  * - USDC asset
  * - $0.001 per query
  * - Free tier bypass when req.freeTier is true
  */
 
-const FACILITATOR_URL = 'https://x402.org/facilitator';
+const FACILITATOR_URL = 'https://facilitator.payai.network';
 
 // Route payment configurations for x402
 const X402_ROUTES: Record<string, {
@@ -24,7 +24,7 @@ const X402_ROUTES: Record<string, {
     accepts: {
       scheme: 'exact',
       price: '$0.001',
-      network: 'eip155:84532',
+      network: 'eip155:8453',
       payTo: config.treasuryAddress,
       asset: config.usdcAddress,
     },
@@ -35,7 +35,7 @@ const X402_ROUTES: Record<string, {
     accepts: {
       scheme: 'exact',
       price: '$0.001',
-      network: 'eip155:84532',
+      network: 'eip155:8453',
       payTo: config.treasuryAddress,
       asset: config.usdcAddress,
     },
@@ -44,14 +44,14 @@ const X402_ROUTES: Record<string, {
   },
 };
 
-// Build the x402 resource server with testnet facilitator
+// Build the x402 resource server with mainnet facilitator
 let _middleware: ReturnType<typeof paymentMiddleware> | null = null;
 
 function getPaymentMiddleware() {
   if (!_middleware) {
     const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
     const resourceServer = new x402ResourceServer(facilitatorClient)
-      .register('eip155:84532', new ExactEvmScheme());
+      .register('eip155:8453', new ExactEvmScheme());
 
     _middleware = paymentMiddleware(
       X402_ROUTES,
