@@ -5,15 +5,15 @@ import { HTTPFacilitatorClient } from '@x402/core/server';
 import { config } from '../config';
 
 /**
- * x402 payment middleware using PayAI Network facilitator (no API keys needed).
+ * x402 payment middleware using xpay facilitator (no KYC, no API keys).
  *
- * - Base Sepolia (eip155:84532)
- * - USDC (Sepolia) asset
+ * - Base Mainnet (eip155:8453)
+ * - USDC (Mainnet) asset
  * - $0.001 per query
  * - Free tier bypass when req.freeTier is true
  */
 
-const FACILITATOR_URL = 'https://facilitator.payai.network';
+const FACILITATOR_URL = 'https://facilitator.xpay.sh';
 
 // Route payment configurations for x402
 const X402_ROUTES: Record<string, {
@@ -24,9 +24,9 @@ const X402_ROUTES: Record<string, {
     accepts: {
       scheme: 'exact',
       price: '$0.001',
-      network: 'eip155:84532',
+      network: 'eip155:84532', // Base Sepolia testnet
       payTo: config.treasuryAddress,
-      asset: config.usdcAddress,
+      asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // Base Sepolia testnet USDC
     },
     description:
       'Query the Cred402 TrustScore for an ERC-8004 AI agent. Returns a 0-100 score with grade, category breakdowns, badges, and improvement tips.',
@@ -35,29 +35,29 @@ const X402_ROUTES: Record<string, {
     accepts: {
       scheme: 'exact',
       price: '$0.001',
-      network: 'eip155:84532',
+      network: 'eip155:84532', // Base Sepolia testnet
       payTo: config.treasuryAddress,
-      asset: config.usdcAddress,
+      asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // Base Sepolia testnet USDC
     },
     description:
       'Get the full agent profile including TrustScore, historical data, and on-chain activity summary.',
   },
 };
 
-// Build the x402 resource server with PayAI facilitator
+// Build the x402 resource server with xpay facilitator
 let _middleware: ReturnType<typeof paymentMiddleware> | null = null;
 
 function getPaymentMiddleware() {
   if (!_middleware) {
     console.log('[x402] Initializing payment middleware');
     console.log('[x402] Facilitator URL:', FACILITATOR_URL);
-    console.log('[x402] Network: eip155:84532 (Base Sepolia)');
+    console.log('[x402] Network: eip155:84532 (Base Sepolia testnet)');
     console.log('[x402] USDC:', config.usdcAddress);
     console.log('[x402] Treasury:', config.treasuryAddress);
 
     const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
     const resourceServer = new x402ResourceServer(facilitatorClient)
-      .register('eip155:84532', new ExactEvmScheme());
+      .register('eip155:84532', new ExactEvmScheme()); // Base Sepolia
 
     _middleware = paymentMiddleware(
       X402_ROUTES,
