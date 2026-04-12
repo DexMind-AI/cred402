@@ -6,8 +6,8 @@ export const config = {
   baseRpcUrl: process.env.BASE_RPC_URL || 'https://sepolia.base.org',
   treasuryAddress: (process.env.CRED402_TREASURY_ADDRESS || '0xD6Ae8D2F816EE123E77D1D698f8a3873A563CB5F') as `0x${string}`,
 
-  // Constants — Base Sepolia testnet for x402 facilitator compatibility
-  usdcAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as `0x${string}`,
+  // Constants — Base mainnet for x402 facilitator compatibility
+  usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`,
   erc8004Registry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as `0x${string}`,
   network: 'base-sepolia' as const,
 
